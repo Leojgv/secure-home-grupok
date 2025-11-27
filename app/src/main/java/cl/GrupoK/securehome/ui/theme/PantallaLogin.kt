@@ -11,6 +11,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import cl.GrupoK.securehome.utils.Constants
+import androidx.compose.ui.graphics.Color
 
 @Composable
 fun LoginScreen(navController: NavController) {
@@ -35,7 +36,16 @@ fun LoginScreen(navController: NavController) {
             onValueChange = { username = it },
             label = { Text("Usuario") },
             isError = isError,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
+                errorTextColor = Color.Black, // Texto negro en error
+                cursorColor = Color.Black,
+                errorCursorColor = Color.Black, // Cursor negro en error
+                focusedLabelColor = Color.Black,
+                unfocusedLabelColor = Color.DarkGray
+            )
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -46,7 +56,16 @@ fun LoginScreen(navController: NavController) {
             label = { Text("Contraseña") },
             visualTransformation = PasswordVisualTransformation(),
             isError = isError,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
+                errorTextColor = Color.Black, // Texto negro en error
+                cursorColor = Color.Black,
+                errorCursorColor = Color.Black, // Cursor negro en error
+                focusedLabelColor = Color.Black,
+                unfocusedLabelColor = Color.DarkGray
+            )
         )
 
         if (isError) {

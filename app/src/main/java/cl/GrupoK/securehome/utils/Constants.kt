@@ -7,6 +7,6 @@ object Constants {
     val BT_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     // Credenciales (Simulación)
-    const val USER_ADMIN = "admin"
-    const val PASS_ADMIN = "1234"
+    const val USER_ADMIN = "GrupoK"
+    const val PASS_ADMIN = "Inacap.2030"
 }
