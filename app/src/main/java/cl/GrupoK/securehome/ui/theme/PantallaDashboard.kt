@@ -44,6 +44,18 @@ fun DashboardScreen(navController: NavController) {
     val btAdapter = systemService.adapter
     val bluetoothManager = remember { MyBluetoothManager(btAdapter) }
 
+    val requiredPermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+    var hasBluetoothPermission by remember { mutableStateOf(hasBluetoothPermissions(context)) }
+
     // --- Estados UI ---
     var isConnected by remember { mutableStateOf(false) }
     var ledState by remember { mutableStateOf(false) }
@@ -54,50 +66,77 @@ fun DashboardScreen(navController: NavController) {
     var foundDevices by remember { mutableStateOf(listOf<BluetoothDevice>()) }
     var isScanning by remember { mutableStateOf(false) }
 
-    // --- Gestión de Permisos (Android 12+) ---
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val canScan = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
-                    permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
-        } else {
-            true // En Android 11 o inferior los permisos están en el Manifest
-        }
-
-        if (canScan && btAdapter?.isEnabled == true) {
-            // Si hay permisos, iniciamos escaneo
+    val startDiscoveryWithPermissionsGranted = {
+        if (btAdapter?.isEnabled == true) {
             foundDevices = emptyList()
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                btAdapter?.bondedDevices?.forEach { device ->
+                    if (!foundDevices.contains(device) && !device.name.isNullOrBlank()) {
+                        foundDevices = foundDevices + device
+                    }
+                }
+            }
             btAdapter.startDiscovery()
             isScanning = true
             showDeviceListDialog = true
         } else {
-            Toast.makeText(context, "Permisos Bluetooth requeridos o BT apagado", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Active el Bluetooth", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // --- Gestión de Permisos (Android 12+) ---
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasBluetoothPermission = hasBluetoothPermissions(context)
+        val canUseBluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
+                    permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
+        } else {
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        }
+
+        if (canUseBluetooth) {
+            startDiscoveryWithPermissionsGranted()
+        } else {
+            Toast.makeText(context, "Permisos Bluetooth requeridos", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val requestOrStartDiscovery = {
+        if (hasBluetoothPermission) {
+            startDiscoveryWithPermissionsGranted()
+        } else {
+            permissionLauncher.launch(requiredPermissions)
         }
     }
 
     // --- BroadcastReceiver para detectar dispositivos ---
-    DisposableEffect(Unit) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when(intent?.action) {
-                    BluetoothDevice.ACTION_FOUND -> {
-                        val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                        device?.let {
-                            if (!foundDevices.contains(it) && !it.name.isNullOrBlank()) {
-                                foundDevices = foundDevices + it
+    DisposableEffect(hasBluetoothPermission) {
+        if (!hasBluetoothPermission) {
+            onDispose { }
+        } else {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    when(intent?.action) {
+                        BluetoothDevice.ACTION_FOUND -> {
+                            val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                            device?.let {
+                                if (!foundDevices.contains(it) && !it.name.isNullOrBlank()) {
+                                    foundDevices = foundDevices + it
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
-        context.registerReceiver(receiver, filter)
+            val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+            context.registerReceiver(receiver, filter)
 
-        onDispose {
-            context.unregisterReceiver(receiver)
-            if (isScanning) btAdapter?.cancelDiscovery()
+            onDispose {
+                context.unregisterReceiver(receiver)
+                if (isScanning) btAdapter?.cancelDiscovery()
+            }
         }
     }
 
@@ -127,31 +166,7 @@ fun DashboardScreen(navController: NavController) {
 
         // Botón 1: Buscar Dispositivos (Solo habilitado si NO está conectado)
         Button(
-            onClick = {
-                // Verificar permisos antes de escanear
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    permissionLauncher.launch(arrayOf(
-                        Manifest.permission.BLUETOOTH_SCAN,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ))
-                } else {
-                    // Android 11 o inferior
-                    if (btAdapter?.isEnabled == true) {
-                        foundDevices = emptyList() // Limpiar lista anterior
-                        // Agregar dispositivos ya pareados primero
-                        btAdapter.bondedDevices.forEach { device ->
-                            if (!foundDevices.contains(device)) {
-                                foundDevices = foundDevices + device
-                            }
-                        }
-                        btAdapter.startDiscovery()
-                        isScanning = true
-                        showDeviceListDialog = true
-                    } else {
-                        Toast.makeText(context, "Active el Bluetooth", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
+            onClick = { requestOrStartDiscovery() },
             enabled = !isConnected, // Se deshabilita si ya estamos conectados
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary
@@ -220,7 +235,7 @@ fun DashboardScreen(navController: NavController) {
         AlertDialog(
             onDismissRequest = {
                 showDeviceListDialog = false
-                btAdapter?.cancelDiscovery()
+                if (hasBluetoothPermission) btAdapter?.cancelDiscovery()
                 isScanning = false
             },
             title = { Text("Dispositivos Encontrados") },
@@ -237,7 +252,12 @@ fun DashboardScreen(navController: NavController) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // Al hacer clic, conectamos
+                                    if (!hasBluetoothPermission) {
+                                        permissionLauncher.launch(requiredPermissions)
+                                        Toast.makeText(context, "Permisos Bluetooth requeridos para conectar", Toast.LENGTH_SHORT).show()
+                                        return@clickable
+                                    }
+
                                     btAdapter?.cancelDiscovery()
                                     isScanning = false
                                     showDeviceListDialog = false
@@ -264,13 +284,22 @@ fun DashboardScreen(navController: NavController) {
             confirmButton = {
                 TextButton(onClick = {
                     showDeviceListDialog = false
-                    btAdapter?.cancelDiscovery()
+                    if (hasBluetoothPermission) btAdapter?.cancelDiscovery()
                     isScanning = false
                 }) {
                     Text("Cancelar")
                 }
             }
         )
+    }
+}
+
+private fun hasBluetoothPermissions(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    } else {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 }
 
