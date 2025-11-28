@@ -10,19 +10,12 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.UUID
 
-/**
- * Cliente Bluetooth encargado de manejar la conexión con el módulo HC-05
- * y el envío de comandos al Arduino.
- *
- * Esta clase NO es composable, se usa desde la capa de UI con corrutinas.
- */
 class BluetoothClient(private val context: Context) {
 
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var bluetoothSocket: BluetoothSocket? = null
 
     /**
-     * Intenta conectar con el dispositivo HC-05 emparejado.
      * Se ejecuta en Dispatchers.IO para no bloquear el hilo principal.
      *
      * @throws IllegalStateException si el bluetooth está desactivado o no existe.
